@@ -52,78 +52,62 @@ All genomic feature extraction and annotation steps are performed in R.
 - TransDecoder (v5.5.0 or later)
 
 TransDecoder is used to extract candidate ORFs from circRNA sequences.
-## Step 1: Extract ORFs with TransDecoder
+## Step 1: Data Pre-processing
+CircRNA sequences are first annotated and converted into model input format.
 
+Example command:
 ```bash
-TransDecoder.LongOrfs -t circ_sequence.fa
+Rscript server_script/web1.R circrna_positive.fa test_positive data/output mode1
 ```
 
-Generates `longest_orfs.cds`.
+This step generates processed sequence files for downstream model training.
 
-## Step 2: Align Sequences with R
+## Step 2: Model Training
 
-Load `circrna_positive.rds` and align ORF sequences. Match ORFs to m6A sites in `m6a_circ_olp.rds`.
 
-```r
-hits <- findOverlaps(m6a_sites, result_gr)
-m6a_sites$ORF <- NA; m6a_sites$ORF_Count <- 0; m6a_sites$ORF_Length <- 0
-m6a_sites$ORF[hits@from] <- mcols(result_gr)$ORF_Genomic[hits@to]
-m6a_sites$ORF_Count[hits@from] <- mcols(result_gr)$ORF_Count[hits@to]
-m6a_sites$ORF_Length[hits@from] <- mcols(result_gr)$ORF_Length[hits@to]
+
+```python
+python sramp2.py
 ```
 
-Determine:
-- Whether the m6A lies inside ORFs.
-- Distance between m6A and both ends of ORFs.
+This script:
 
-## Step 3: Check Overlap with IRES
+1.loads positive and negative datasets
 
-```r
-hits <- findOverlaps(m6a_sites, result_gr)
-m6a_sites$IRES <- NA; m6a_sites$IRES_Count <- 0; m6a_sites$IRES_Length <- 0
-m6a_sites$IRES[hits@from] <- mcols(result_gr)$IRES[hits@to]
-m6a_sites$IRES_Count[hits@from] <- mcols(result_gr)$IRES_Count[hits@to]
-m6a_sites$IRES_Length[hits@from] <- mcols(result_gr)$IRES_Length[hits@to]
-```
+2.performs random negative sampling
 
-## Step 4: Check Overlap with RBP
+3.trains the SRAMP-based deep learning model
 
-```r
-rbp <- readRDS("RBP_site_gr_38.rds")
-rbp_list <- c("HNRNPC","YTHDC1","YTHDF1","YTHDF2","YTHDF3","METTL3","METTL14",
-              "METTL16","WTAP","ALKBH5","FTO")
+4.saves the best model checkpoints
 
-```
+## Step 3: Evaluation
 
-## Step 5: Overlap with miRNA、phastcons、SplicingSite_Num Sites
+Model performance is evaluated automatically during training.
 
-```r
-miRNA_ALL_gr <- readRDS("miRNA_ALL_gr.rds")
-mcols(candidate_sites)$miRNA <- FALSE
-overlaps <- findOverlaps(candidate_sites, miRNA_ALL_gr)
-mcols(candidate_sites)$miRNA[queryHits(overlaps)] <- TRUE
-hg38_splicing_sites_100bp_gr <- readRDS("hg38_splicing_sites_100bp_gr.rds")
-mcols(candidate_sites)$SplicingSite_Num <- FALSE
-overlaps <- findOverlaps(candidate_sites, hg38_splicing_sites_100bp_gr)
-mcols(candidate_sites)$SplicingSite_Num[queryHits(overlaps)] <- TRUE
+Evaluation metrics include:
 
-```
+AUROC
 
-## Step 6: Feature Preprocessing (preprocess_m6A_features.R)
-```
-Rscript server script/veb.R example output.fa test fasta 01 data/output mode2
-```
+AUPRC
 
-## Step 7: Deep Learning Training & SHAP Interpretation
+Accuracy
 
-```
-python predict_m6acirc.py test002 /you/path/data/output
-```
+Precision
 
-## Final Workflow Summary
+Recall
 
-- Train model via `predict_m6acirc.py`.
-- Visualize SHAP feature importance via `shap_analysis.py`.
-- Evaluate using metrics such as AUC, accuracy, and F1 score.
+F1-score
+
+MCC
+
+Results are saved in:
+
+train_runs_all/
+
+including:
+
+metrics_run*.csv
+summary_runs.csv
+sramp_run*_best.pth
 
 
